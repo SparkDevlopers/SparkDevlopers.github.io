@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Lyrics Player</title>
+  <style>
+    /* Style for the fixed header containing media controls */
+    #header {
+      position: fixed;
+      top: 0;
+      width: 100%;
+      background-color: #f8f8f8;
+      padding: 10px 0;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    
+    /* Style for the audio player */
+    #audio-container {
+      margin-top: 10px; /* Ensure space for the fixed header */
+    }
+    
+    /* Style for the lyrics */
+    #lyrics {
+      text-align: center;
+      margin-top: 20px; /* Add space between audio player and lyrics */
+      padding-top: 60px; /* Add padding equal to the height of the fixed header */
+    }
+    #lyrics span {
+      display: block;
+    }
+    
+    /* Style for the cover image */
+    #coverArtContainer {
+      margin-top: 20px;
+      text-align: center;
+    }
+    #coverArtContainer img {
+      max-width: 200px;
+      max-height: 200px;
+    }
+    /* Style for the file inputs */
+    input[type="file"] {
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div id="header">
+    <audio id="audio" controls>
+      <source id="audioSource" type="audio/mp3">
+      Your browser does not support the audio element.
+    </audio>
+    <label for="mp3Input">Select MP3 file:</label>
+    <input type="file" id="mp3Input" accept=".mp3">
+    <label for="lrcInput">Select LRC file:</label>
+    <input type="file" id="lrcInput" accept=".lrc">
+  </div>
+
+  <div id="audio-container">
+    <div id="lyrics"></div>
+  </div>
+  
+  <div id="coverArtContainer"></div>
+  
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+  <script>
+    const audio = document.getElementById('audio');
+    const lyricsDiv = document.getElementById('lyrics');
+    const coverArtContainer = document.getElementById('coverArtContainer');
+    const mp3Input = document.getElementById('mp3Input');
+    const lrcInput = document.getElementById('lrcInput');
+
+    mp3Input.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        audio.src = URL.createObjectURL(file);
+        readTags(file);
+      }
+    });
+
+    lrcInput.addEventListener('change', function(e) {
+      const file = e.target.files[0];
+      if (file) {
+        loadLyrics(file);
+      }
+    });
+
+    function readTags(file) {
+      jsmediatags.read(file, {
+        onSuccess: function(tag) {
+          displayCoverArt(tag);
+        },
+        onError: function(error) {
+          console.error('Error reading tags:', error);
+        }
+      });
+    }
+
+    function displayCoverArt(tag) {
+      const coverArt = tag.tags.picture;
+      if (coverArt) {
+        const base64String = arrayBufferToBase64(coverArt.data);
+        const base64 = "data:" + coverArt.format + ";base64," + base64String;
+        const img = new Image();
+        img.src = base64;
+        coverArtContainer.innerHTML = '';
+        coverArtContainer.appendChild(img);
+      } else {
+        console.log('No cover art found.');
+      }
+    }
+
+    // Function to convert ArrayBuffer to base64 string
+    function arrayBufferToBase64(buffer) {
+      let binary = '';
+      const bytes = new Uint8Array(buffer);
+      const len = bytes.byteLength;
+      for (let i = 0; i < len; i++) {
+        binary += String.fromCharCode(bytes[i]);
+      }
+      return window.btoa(binary);
+    }
+
+    function loadLyrics(file) {
+      const reader = new FileReader();
+      reader.onload = function(event) {
+        const lyricsContent = event.target.result;
+        displayLyrics(lyricsContent);
+      };
+      reader.readAsText(file);
+    }
+
+    function displayLyrics(lyricsContent) {
+      lyricsDiv.innerHTML = '';
+      const lines = lyricsContent.split('\n');
+      const regex = /\[(\d+:\d+\.\d+)\](.*)/;
+      lines.forEach(line => {
+        const match = regex.exec(line);
+        if (match) {
+          const timestamp = match[1];
+          const lyric = match[2];
+          const timeParts = timestamp.split(':');
+          const minutes = parseInt(timeParts[0]);
+          const seconds = parseFloat(timeParts[1]);
+          const totalSeconds = minutes * 60 + seconds;
+          const span = document.createElement('span');
+          span.textContent = lyric.trim(); 
+          span.dataset.time = totalSeconds;
+          lyricsDiv.appendChild(span);
+        }
+      });
+    }
+
+    function updateLyrics() {
+      const currentTime = audio.currentTime;
+      const spans = lyricsDiv.querySelectorAll('span');
+      let selectedSpan = null;
+      spans.forEach(span => {
+        const startTime = parseFloat(span.dataset.time);
+        const endTime = spans[span.dataset.index + 1] ? parseFloat(spans[span.dataset.index + 1].dataset.time) : audio.duration;
+        if (currentTime >= startTime && currentTime < endTime) {
+          selectedSpan = span;
+        }
+      });
+      spans.forEach(span => {
+        if (span === selectedSpan) {
+          span.style.color = 'red';
+          span.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        } else {
+          span.style.color = 'black';
+        }
+      });
+    }
+
+    audio.addEventListener('timeupdate', updateLyrics);
+  </script>
+</body>
+</html>
