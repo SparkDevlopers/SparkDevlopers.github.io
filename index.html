@@ -1,180 +1,340 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-  <title>Lyrics Player</title>
-  <style>
-    /* Style for the fixed header containing media controls */
-    #header {
-      position: fixed;
-      top: 0;
-      width: 100%;
-      background-color: #f8f8f8;
-      padding: 10px 0;
-      text-align: center;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-    }
-    
-    /* Style for the audio player */
-    #audio-container {
-      margin-top: 10px; /* Ensure space for the fixed header */
-    }
-    
-    /* Style for the lyrics */
-    #lyrics {
-      text-align: center;
-      margin-top: 120px; /* Add space between audio player and lyrics */
-      padding-top: 120px; /* Add padding equal to the height of the fixed header */
-    }
-    #lyrics span {
-      display: block;
-    }
-    
-    /* Style for the cover image */
-    #coverArtContainer {
-      margin-top: 20px;
-      text-align: center;
-    }
-    #coverArtContainer img {
-      max-width: 200px;
-      max-height: 200px;
-    }
-    /* Style for the file inputs */
-    input[type="file"] {
-      margin-top: 10px;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Player with Lyrics and Volume Control</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+            display: flex;
+            flex-direction: row;
+            justify-content: space-around;
+            align-items: flex-start;
+            padding: 20px;
+            margin: 0;
+        }
+        #leftContainer, #rightContainer {
+            width: 45%;
+        }
+        h1 {
+            margin: 20px 0;
+        }
+        #audioContainer, #playlist {
+            margin-top: 20px;
+            text-align: center;
+            width: 100%;
+        }
+        #playlist .track {
+            padding: 10px;
+            border-bottom: 1px solid #ddd;
+            cursor: pointer;
+        }
+        #playlist .track:hover {
+            background: #f9f9f9;
+        }
+        #playlist .track.active {
+            background: #e0e0e0;
+            font-weight: bold;
+        }
+        #lyrics {
+            text-align: center;
+            margin-top: 20px;
+            padding-top: 60px;
+            max-height: 500px;
+            overflow-y: auto;
+        }
+        #lyrics span {
+            display: block;
+        }
+        #lyrics span.highlight {
+            color: red;
+            font-weight: bold;
+        }
+        #coverArtContainer {
+            margin-top: 20px;
+            text-align: center;
+        }
+        #coverArtContainer img {
+            max-width: 200px;
+            max-height: 200px;
+        }
+        input[type="file"] {
+            margin-top: 10px;
+        }
+        .audio-controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            margin-top: 20px;
+        }
+        .audio-controls button {
+            margin: 0 5px;
+            padding: 10px;
+        }
+        @media (max-width: 600px) {
+            body {
+                flex-direction: column;
+                align-items: center;
+            }
+            #leftContainer, #rightContainer {
+                width: 100%;
+            }
+        }
+    </style>
 </head>
 <body>
-  <div id="header">
-    <audio id="audio" controls>
-      <source id="audioSource" type="audio/mp3">
-      Your browser does not support the audio element.
-    </audio>
-    <label for="mp3Input">Select MP3 file:</label>
-    <input type="file" id="mp3Input" accept=".mp3">
-    <label for="lrcInput">Select LRC file:</label>
-    <input type="file" id="lrcInput" accept=".lrc">
-  </div>
+    <div id="leftContainer">
+        <h1>Upload and Play Multiple Audio Files with Lyrics</h1>
+        <input type="file" id="fileInput" multiple accept="audio/*">
+        <div class="audio-controls">
+            <button onclick="playPrevious()">Previous</button>
+            <button onclick="playPause()">Play/Pause</button>
+            <button onclick="playNext()">Next</button>
+        </div>
+        <div>
+            <label for="volumeControl">Volume:</label>
+            <input type="range" id="volumeControl" min="0" max="1" step="0.01" value="1" onchange="setVolume(this.value)">
+        </div>
+        <div id="audioContainer"></div>
+        <div id="playlist"></div>
+        <div id="coverArtContainer"></div>
+    </div>
+    <div id="rightContainer">
+        <h2>Lyrics:</h2>
+        <div id="lyrics"></div>
+    </div>
 
-  <div id="audio-container">
-    <div id="lyrics"></div>
-  </div>
-  
-  <div id="coverArtContainer"></div>
-  
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
-  <script>
-    const audio = document.getElementById('audio');
-    const lyricsDiv = document.getElementById('lyrics');
-    const coverArtContainer = document.getElementById('coverArtContainer');
-    const mp3Input = document.getElementById('mp3Input');
-    const lrcInput = document.getElementById('lrcInput');
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jsmediatags/3.9.5/jsmediatags.min.js"></script>
+    <script>
+        let audioFiles = [];
+        let sortedAudioFiles = [];
+        let currentAudioIndex = 0;
+        let currentVolume = 1;
+        const lyricsDiv = document.getElementById('lyrics');
 
-    mp3Input.addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (file) {
-        audio.src = URL.createObjectURL(file);
-        readTags(file);
-      }
-    });
+        document.getElementById('fileInput').addEventListener('change', function(event) {
+            audioFiles = Array.from(event.target.files);
+            sortedAudioFiles = [];
+            currentAudioIndex = 0;
 
-    lrcInput.addEventListener('change', function(e) {
-      const file = e.target.files[0];
-      if (file) {
-        loadLyrics(file);
-      }
-    });
+            audioFiles.forEach(file => {
+                jsmediatags.read(file, {
+                    onSuccess: function(tag) {
+                        const track = tag.tags.track ? parseInt(tag.tags.track.split('/')[0]) : 0;
+                        sortedAudioFiles.push({ file, track, tags: tag.tags });
+                        if (sortedAudioFiles.length === audioFiles.length) {
+                            sortedAudioFiles.sort((a, b) => a.track - b.track);
+                            displayPlaylist();
+                            displayAudioElements();
+                        }
+                    },
+                    onError: function(error) {
+                        console.log(error);
+                    }
+                });
+            });
+        });
 
-    function readTags(file) {
-      jsmediatags.read(file, {
-        onSuccess: function(tag) {
-          displayCoverArt(tag);
-        },
-        onError: function(error) {
-          console.error('Error reading tags:', error);
+        function displayPlaylist() {
+            const playlist = document.getElementById('playlist');
+            playlist.innerHTML = '';
+            sortedAudioFiles.forEach((audioFile, index) => {
+                const trackDiv = document.createElement('div');
+                trackDiv.classList.add('track');
+                trackDiv.textContent = audioFile.tags.title || `Track ${index + 1}`;
+                trackDiv.dataset.index = index;
+                trackDiv.addEventListener('click', () => {
+                    playTrack(index);
+                });
+                playlist.appendChild(trackDiv);
+            });
         }
-      });
-    }
 
-    function displayCoverArt(tag) {
-      const coverArt = tag.tags.picture;
-      if (coverArt) {
-        const base64String = arrayBufferToBase64(coverArt.data);
-        const base64 = "data:" + coverArt.format + ";base64," + base64String;
-        const img = new Image();
-        img.src = base64;
-        coverArtContainer.innerHTML = '';
-        coverArtContainer.appendChild(img);
-      } else {
-        console.log('No cover art found.');
-      }
-    }
-
-    // Function to convert ArrayBuffer to base64 string
-    function arrayBufferToBase64(buffer) {
-      let binary = '';
-      const bytes = new Uint8Array(buffer);
-      const len = bytes.byteLength;
-      for (let i = 0; i < len; i++) {
-        binary += String.fromCharCode(bytes[i]);
-      }
-      return window.btoa(binary);
-    }
-
-    function loadLyrics(file) {
-      const reader = new FileReader();
-      reader.onload = function(event) {
-        const lyricsContent = event.target.result;
-        displayLyrics(lyricsContent);
-      };
-      reader.readAsText(file);
-    }
-
-    function displayLyrics(lyricsContent) {
-      lyricsDiv.innerHTML = '';
-      const lines = lyricsContent.split('\n');
-      const regex = /\[(\d+:\d+\.\d+)\](.*)/;
-      lines.forEach(line => {
-        const match = regex.exec(line);
-        if (match) {
-          const timestamp = match[1];
-          const lyric = match[2];
-          const timeParts = timestamp.split(':');
-          const minutes = parseInt(timeParts[0]);
-          const seconds = parseFloat(timeParts[1]);
-          const totalSeconds = minutes * 60 + seconds;
-          const span = document.createElement('span');
-          span.textContent = lyric.trim(); 
-          span.dataset.time = totalSeconds;
-          lyricsDiv.appendChild(span);
+        function displayAudioElements() {
+            document.getElementById('audioContainer').innerHTML = '';
+            sortedAudioFiles.forEach((audioFile, index) => {
+                const audioElement = document.createElement('audio');
+                audioElement.src = URL.createObjectURL(audioFile.file);
+                audioElement.id = 'audio' + index;
+                audioElement.onended = playNext;
+                audioElement.onplay = () => {
+                    fetchLyrics(audioFile.tags);
+                    displayCoverArt(audioFile.tags.picture);
+                };
+                audioElement.ontimeupdate = () => {
+                    highlightLyrics(audioElement.currentTime);
+                };
+                audioElement.volume = currentVolume; // Set the initial volume
+                document.getElementById('audioContainer').appendChild(audioElement);
+            });
         }
-      });
-    }
 
-    function updateLyrics() {
-      const currentTime = audio.currentTime;
-      const spans = lyricsDiv.querySelectorAll('span');
-      let selectedSpan = null;
-      spans.forEach(span => {
-        const startTime = parseFloat(span.dataset.time);
-        const endTime = spans[span.dataset.index + 1] ? parseFloat(spans[span.dataset.index + 1].dataset.time) : audio.duration;
-        if (currentTime >= startTime && currentTime < endTime) {
-          selectedSpan = span;
+        function playAll() {
+            if (sortedAudioFiles.length > 0) {
+                playTrack(0);
+            }
         }
-      });
-      spans.forEach(span => {
-        if (span === selectedSpan) {
-          span.style.color = 'red';
-          span.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        } else {
-          span.style.color = 'black';
-        }
-      });
-    }
 
-    audio.addEventListener('timeupdate', updateLyrics);
-  </script>
+        function playTrack(index) {
+            const previousAudio = document.getElementById('audio' + currentAudioIndex);
+            if (previousAudio) {
+                previousAudio.pause();
+                previousAudio.currentTime = 0;
+            }
+
+            currentAudioIndex = index;
+            const currentAudio = document.getElementById('audio' + currentAudioIndex);
+            if (currentAudio) {
+                currentAudio.play();
+                updatePlaylistUI(currentAudioIndex);
+            }
+        }
+
+        function playPause() {
+            const currentAudio = document.getElementById('audio' + currentAudioIndex);
+            if (currentAudio.paused) {
+                currentAudio.play();
+            } else {
+                currentAudio.pause();
+            }
+        }
+
+        function playPrevious() {
+            if (currentAudioIndex > 0) {
+                playTrack(currentAudioIndex - 1);
+            }
+        }
+
+        function playNext() {
+            if (currentAudioIndex < sortedAudioFiles.length - 1) {
+                playTrack(currentAudioIndex + 1);
+            }
+        }
+
+        function updatePlaylistUI(index) {
+            const tracks = document.querySelectorAll('#playlist .track');
+            tracks.forEach(track => track.classList.remove('active'));
+            tracks[index].classList.add('active');
+        }
+
+        function setVolume(volume) {
+            currentVolume = volume;
+            const audioElements = document.querySelectorAll('audio');
+            audioElements.forEach(audio => {
+                audio.volume = currentVolume;
+            });
+        }
+
+        async function fetchLyrics(tags) {
+            const songInfo = {
+                title: tags.title || "",
+                artist: tags.artist || "",
+                album: tags.album || "",
+                duration: 0 // Duration in milliseconds, not provided here
+            };
+
+            try {
+                const lyrics = await findLyrics(songInfo);
+                displayLyrics(lyrics);
+            } catch (error) {
+                console.error("Error fetching lyrics:", error);
+                lyricsDiv.textContent = "Error fetching lyrics.";
+            }
+        }
+
+        async function findLyrics(info) {
+            const searchURL = "https://music.xianqiao.wang/neteaseapiv2/search?limit=10&type=1&keywords=";
+            const lyricURL = "https://music.xianqiao.wang/neteaseapiv2/lyric?id=";
+
+            const cleanTitle = info.title.replace(/\(.*\)|\[.*\]/g, "").trim(); // Remove parentheses and brackets
+            const finalURL = searchURL + encodeURIComponent(`${cleanTitle} ${info.artist}`);
+
+            const searchResults = await fetch(finalURL);
+            const data = await searchResults.json();
+
+            const items = data.result.songs;
+            if (!items?.length) {
+                throw "Cannot find track";
+            }
+
+            const expectedAlbumName = info.album;
+            const itemId = items.findIndex(val => val.album.name === expectedAlbumName || Math.abs(info.duration - val.duration) < 1000);
+            if (itemId === -1) throw "Cannot find track";
+
+            const lyricResponse = await fetch(lyricURL + items[itemId].id);
+            const lyricData = await lyricResponse.json();
+            return lyricData.lrc.lyric;
+        }
+
+        function displayLyrics(lyricsContent) {
+            lyricsDiv.innerHTML = '';
+            const lines = lyricsContent.split('\n');
+            const regex = /\[(\d+:\d+\.\d+)\](.*)/;
+            lines.forEach((line, index) => {
+                const match = regex.exec(line);
+                if (match) {
+                    const timestamp = match[1];
+                    const lyric = match[2];
+                    const timeParts = timestamp.split(':');
+                    const minutes = parseInt(timeParts[0]);
+                    const seconds = parseFloat(timeParts[1]);
+                    const totalSeconds = minutes * 60 + seconds;
+                    const span = document.createElement('span');
+                    span.textContent = lyric.trim();
+                    span.dataset.time = totalSeconds;
+                    span.dataset.index = index;
+                    lyricsDiv.appendChild(span);
+                }
+            });
+        }
+
+        function highlightLyrics(currentTime) {
+            const spans = lyricsDiv.querySelectorAll('span');
+            let currentSpan = null;
+
+            spans.forEach(span => {
+                const spanTime = parseFloat(span.dataset.time);
+                if (currentTime >= spanTime) {
+                    if (currentSpan) {
+                        currentSpan.classList.remove('highlight');
+                    }
+                    span.classList.add('highlight');
+                    currentSpan = span;
+                } else {
+                    span.classList.remove('highlight');
+                }
+            });
+
+            if (currentSpan) {
+                currentSpan.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+        }
+
+        function displayCoverArt(picture) {
+            const coverArtContainer = document.getElementById('coverArtContainer');
+            coverArtContainer.innerHTML = '';
+
+            if (picture) {
+                const base64String = arrayBufferToBase64(picture.data);
+                const img = document.createElement('img');
+                img.src = `data:${picture.format};base64,${base64String}`;
+                coverArtContainer.appendChild(img);
+            } else {
+                coverArtContainer.textContent = 'No cover art available.';
+            }
+        }
+
+        function arrayBufferToBase64(buffer) {
+            let binary = '';
+            const bytes = new Uint8Array(buffer);
+            const len = bytes.byteLength;
+            for (let i = 0; i < len; i++) {
+                binary += String.fromCharCode(bytes[i]);
+            }
+            return window.btoa(binary);
+        }
+    </script>
 </body>
 </html>
